@@ -469,8 +469,24 @@ async function main() {
       console.log(`Score ${signal.score} < ${SCORE_MIN}, ignorando ${signal.symbol}`);
       return;
     }
+    if (signal.dex === 'AsterDEX' && signal.score >= SCORE_MIN) {
+      const asterUrl = `https://asterdex.com/en/trade/pro/futures/${signal.symbol}USDT`;
+      await sendTelegram(
+        `⚡ *SEÑAL ASTERDEX — ${signal.symbol}*\n\n` +
+        `Score: ${signal.score}/100 · 3/11 señales\n\n` +
+        `├ Entrada: $${signal.entrada.toFixed(6)}\n` +
+        `├ SL:      $${signal.sl.toFixed(6)}\n` +
+        `├ TP:      $${signal.tp.toFixed(6)}\n\n` +
+        `💰 $6 USDT mínimo · 3x · Short\n\n` +
+        `🔗 [Abrir en AsterDEX](${asterUrl})\n\n` +
+        `⚠️ Ejecución manual — bot no opera en DEX`
+      );
+      console.log(`Notificación AsterDEX enviada: ${signal.symbol} score=${signal.score}`);
+      return;
+    }
+
     if (signal.dex !== 'MEXC') {
-      console.log(`Señal ${signal.dex} ignorada (solo MEXC)`);
+      console.log(`Señal ${signal.dex} ignorada`);
       return;
     }
 
