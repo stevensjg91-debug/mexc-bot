@@ -377,6 +377,9 @@ async function main() {
     const text = msg.text || msg.caption || '';
     const chatId = msg.chat.id.toString();
 
+    // Log para debug
+    console.log(`Mensaje recibido | chat: ${chatId} | from: ${msg.from?.username || msg.from?.id} | forward: ${!!msg.forward_origin} | texto: ${text.substring(0, 60)}`);
+
     if (chatId !== TELEGRAM_CHAT_ID.toString()) return;
 
     // Comandos
@@ -449,7 +452,16 @@ async function main() {
 
     // Procesar señal Death Scanner
     if (!botActive) return;
-    if (!text.includes('DEATH SCANNER') && !text.includes('CONFIRMADA')) return;
+
+    // Detectar mensaje del wolfscannnerbot (directo o reenviado)
+    const fromScanner = msg.forward_origin?.sender_user?.username === 'wolfscannnerbot'
+      || msg.forward_from?.username === 'wolfscannnerbot'
+      || msg.from?.username === 'wolfscannnerbot'
+      || msg.from?.id === 8772548345;
+
+    const isSignal = text.includes('DEATH SCANNER') || text.includes('CONFIRMADA') || text.includes('score:');
+
+    if (!fromScanner && !isSignal) return;
 
     const signal = parseSignal(text);
     if (!signal.valid) return;
