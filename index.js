@@ -181,26 +181,22 @@ async function initSheet() {
 // ============================================
 function parseSignal(text) {
   try {
-    const scoreMatch = text.match(/score[:\s]+(\d+)/i) || text.match(/\(score:\s*(\d+)/i);
-    const score = scoreMatch ? parseInt(scoreMatch[1]) : 0;
-
-    const symMatch = text.match(/\*([A-Z0-9]+)\*/);
-    const symbol = symMatch ? symMatch[1] : null;
-
-    const dexMatch = text.match(/·\s*(MEXC|AsterDEX|Hyperliquid|Backpack|Paradex)/i);
-    const dex = dexMatch ? dexMatch[1] : 'MEXC';
-
-    const entradaMatch = text.match(/Entrada[:\s]+\$([0-9.]+)/i);
-    const entrada = entradaMatch ? parseFloat(entradaMatch[1]) : 0;
-
-    const slMatch = text.match(/SL[:\s]+\$([0-9.]+)/i) || text.match(/Invalidaci[oó]n[:\s]+\$([0-9.]+)/i);
-    const sl = slMatch ? parseFloat(slMatch[1]) : 0;
-
-    const tpMatch = text.match(/TP[:\s]+\$([0-9.]+)/i);
-    const tp = tpMatch ? parseFloat(tpMatch[1]) : 0;
-
-    return { score, symbol, dex, entrada, sl, tp, valid: !!(score && symbol && entrada) };
+    // Formato directo del scanner: SIGNAL:{"sym":"BTW","dex":"MEXC","score":93,...}
+    if (text.startsWith('SIGNAL:')) {
+      const json = JSON.parse(text.slice(7));
+      return {
+        score:   parseInt(json.score || 0),
+        symbol:  json.sym || null,
+        dex:     json.dex || 'MEXC',
+        entrada: parseFloat(json.entrada || 0),
+        sl:      parseFloat(json.sl || 0),
+        tp:      parseFloat(json.tp || 0),
+        valid:   !!(json.score && json.sym && json.entrada)
+      };
+    }
+    return { valid: false };
   } catch (e) {
+    console.error('parseSignal error:', e.message);
     return { valid: false };
   }
 }
@@ -209,7 +205,8 @@ function parseSignal(text) {
 // EJECUTAR TRADE CON SL/TP NATIVOS
 // ============================================
 async function executeTrade(signal) {
-  const { symbol, score, dex, sl, tp } = signal;
+  const { symbol: sym, dex, score, sl, tp } = signal;
+  const symbol = sym;
   const mexcSymbol = `${symbol}_USDT`;
 
   if (Object.keys(openPositions).length >= MAX_POSITIONS) {
@@ -450,18 +447,10 @@ async function main() {
       return;
     }
 
-    // Procesar señal Death Scanner
+    // Procesar señal directa del scanner (formato SIGNAL:{...})
     if (!botActive) return;
 
-    // Detectar mensaje del wolfscannnerbot (directo o reenviado)
-    const fromScanner = msg.forward_origin?.sender_user?.username === 'wolfscannnerbot'
-      || msg.forward_from?.username === 'wolfscannnerbot'
-      || msg.from?.username === 'wolfscannnerbot'
-      || msg.from?.id === 8772548345;
-
-    const isSignal = text.includes('DEATH SCANNER') || text.includes('CONFIRMADA') || text.includes('score:');
-
-    if (!fromScanner && !isSignal) return;
+    if (!text.startsWith('SIGNAL:')) return;
 
     const signal = parseSignal(text);
     if (!signal.valid) return;
