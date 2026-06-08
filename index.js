@@ -2,6 +2,7 @@ require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const crypto = require('crypto');
+const http = require('http');
 const { google } = require('googleapis');
 
 // ============================================
@@ -74,33 +75,31 @@ async function openShort(symbol, contracts) {
     symbol,
     price: 0,
     vol: contracts,
-    side: 3,      // open short
-    type: 5,      // market
-    openType: 1   // isolated
+    side: 3,
+    type: 5,
+    openType: 1
   });
 }
 
-// SL nativo: orden stop que cierra el short cuando precio SUBE al SL
 async function placeStopLoss(symbol, contracts, slPrice) {
   return mexcRequest('POST', '/api/v1/private/order/submit', {
     symbol,
     price: slPrice,
     vol: contracts,
-    side: 4,        // close short
-    type: 3,        // stop market
+    side: 4,
+    type: 3,
     openType: 1,
     stopLossPrice: slPrice
   });
 }
 
-// TP nativo: orden limit que cierra el short cuando precio BAJA al TP
 async function takeProfitOrder(symbol, contracts, tpPrice) {
   return mexcRequest('POST', '/api/v1/private/order/submit', {
     symbol,
     price: tpPrice,
     vol: contracts,
-    side: 4,        // close short
-    type: 1,        // limit
+    side: 4,
+    type: 1,
     openType: 1
   });
 }
@@ -177,16 +176,16 @@ async function initSheet() {
 }
 
 // ============================================
-// PARSEAR SEÑAL DEL SCANNER
+// PARSEAR SEÑAL
 // ============================================
 function parseSignal(text) {
   try {
-    // Formato directo del scanner: SIGNAL:{"sym":"BTW","dex":"MEXC","score":93,...}
     if (text.startsWith('SIGNAL:')) {
       const json = JSON.parse(text.slice(7));
       return {
         score:   parseInt(json.score || 0),
         symbol:  json.sym || null,
+        sym:     json.sym || null,
         dex:     json.dex || 'MEXC',
         entrada: parseFloat(json.entrada || 0),
         sl:      parseFloat(json.sl || 0),
@@ -202,72 +201,63 @@ function parseSignal(text) {
 }
 
 // ============================================
-// EJECUTAR TRADE CON SL/TP NATIVOS
+// EJECUTAR TRADE
 // ============================================
 async function executeTrade(signal) {
-  const { symbol: sym, dex, score, sl, tp } = signal;
-  const symbol = sym;
-  const mexcSymbol = `${symbol}_USDT`;
+  const sym = signal.sym || signal.symbol;
+  const { dex, score, sl, tp } = signal;
+  const mexcSymbol = `${sym}_USDT`;
 
   if (Object.keys(openPositions).length >= MAX_POSITIONS) {
-    await sendTelegram(`⚠️ Máx posiciones (${MAX_POSITIONS}) — ignorando ${symbol}`);
+    await sendTelegram(`⚠️ Máx posiciones (${MAX_POSITIONS}) — ignorando ${sym}`);
     return;
   }
 
-  if (openPositions[symbol]) {
-    console.log(`Ya hay posición en ${symbol}`);
+  if (openPositions[sym]) {
+    console.log(`Ya hay posición en ${sym}`);
     return;
   }
 
   const balance = await getAccountBalance();
   if (balance < TRADE_SIZE) {
-    await sendTelegram(`❌ Balance insuficiente ($${balance.toFixed(2)}) para abrir ${symbol}`);
+    await sendTelegram(`❌ Balance insuficiente ($${balance.toFixed(2)}) para abrir ${sym}`);
     return;
   }
 
   const currentPrice = await getCurrentPrice(mexcSymbol);
   if (!currentPrice) {
-    await sendTelegram(`❌ No se pudo obtener precio de ${symbol}`);
+    await sendTelegram(`❌ No se pudo obtener precio de ${sym}`);
     return;
   }
 
-  // Calcular contratos
-  const notional = TRADE_SIZE * LEVERAGE;
+  const notional  = TRADE_SIZE * LEVERAGE;
   const contracts = Math.max(Math.floor((notional / currentPrice) * 10) / 10, 0.1);
+  const slPrice   = sl > 0 ? sl : parseFloat((currentPrice * 1.10).toFixed(6));
+  const tpPrice   = tp > 0 ? tp : parseFloat((currentPrice * 0.70).toFixed(6));
 
-  // Calcular SL y TP
-  const slPrice = sl > 0 ? sl : parseFloat((currentPrice * 1.10).toFixed(6));
-  const tpPrice = tp > 0 ? tp : parseFloat((currentPrice * 0.70).toFixed(6));
+  console.log(`Abriendo short ${sym}: ${contracts} contratos @ $${currentPrice} | SL: ${slPrice} | TP: ${tpPrice}`);
 
-  console.log(`Abriendo short ${symbol}: ${contracts} contratos @ $${currentPrice} | SL: ${slPrice} | TP: ${tpPrice}`);
-
-  // 1. Configurar leverage
   await setLeverage(mexcSymbol, LEVERAGE);
 
-  // 2. Abrir short (market)
   const order = await openShort(mexcSymbol, contracts);
   if (!order || order.code !== 200) {
-    await sendTelegram(`❌ Error al abrir short ${symbol}: ${order?.message || 'error desconocido'}`);
+    await sendTelegram(`❌ Error al abrir short ${sym}: ${order?.message || 'error desconocido'}`);
     return;
   }
 
-  // Pequeña pausa para que la orden se procese
   await sleep(1000);
 
-  // 3. Poner TP nativo (limit close)
   const tpOrder = await takeProfitOrder(mexcSymbol, contracts, tpPrice);
   if (!tpOrder || tpOrder.code !== 200) {
-    console.warn(`TP order falló para ${symbol}:`, tpOrder?.message);
+    console.warn(`TP order falló para ${sym}:`, tpOrder?.message);
   }
 
-  // 4. Poner SL nativo (stop market close)
   const slOrder = await placeStopLoss(mexcSymbol, contracts, slPrice);
   if (!slOrder || slOrder.code !== 200) {
-    console.warn(`SL order falló para ${symbol}:`, slOrder?.message);
+    console.warn(`SL order falló para ${sym}:`, slOrder?.message);
   }
 
-  // Guardar posición en memoria para tracking
-  openPositions[symbol] = {
+  openPositions[sym] = {
     entryPrice: currentPrice,
     contracts,
     sl: slPrice,
@@ -279,15 +269,15 @@ async function executeTrade(signal) {
     slOrderId: slOrder?.data
   };
 
-  const slOk = tpOrder?.code === 200 ? '✅' : '⚠️';
-  const tpOk = slOrder?.code === 200 ? '✅' : '⚠️';
+  const tpOk = tpOrder?.code === 200 ? '✅' : '⚠️';
+  const slOk = slOrder?.code === 200 ? '✅' : '⚠️';
 
   await sendTelegram(
-    `✅ *SHORT abierto — ${symbol}*\n\n` +
+    `✅ *SHORT abierto — ${sym}*\n\n` +
     `Score: ${score}/100 · ${dex}\n\n` +
     `├ Entrada:   $${currentPrice.toFixed(6)}\n` +
-    `├ TP ${slOk}:     $${tpPrice.toFixed(6)}\n` +
-    `├ SL ${tpOk}:     $${slPrice.toFixed(6)}\n` +
+    `├ TP ${tpOk}:     $${tpPrice.toFixed(6)}\n` +
+    `├ SL ${slOk}:     $${slPrice.toFixed(6)}\n` +
     `├ Contratos: ${contracts}\n` +
     `└ $${TRADE_SIZE} · ${LEVERAGE}x · exposición $${notional}\n\n` +
     `📊 Posiciones: ${Object.keys(openPositions).length}/${MAX_POSITIONS}`
@@ -295,9 +285,7 @@ async function executeTrade(signal) {
 }
 
 // ============================================
-// MONITOR — verifica si posición ya cerró (cada 30s)
-// Solo para detectar cierres y registrar en Sheets
-// El SL/TP real lo gestiona MEXC directamente
+// MONITOR
 // ============================================
 async function monitorPositions() {
   if (Object.keys(openPositions).length === 0) return;
@@ -308,7 +296,6 @@ async function monitorPositions() {
   for (const [symbol, pos] of Object.entries(openPositions)) {
     const mexcSymbol = `${symbol}_USDT`;
 
-    // Si ya no está en posiciones abiertas → cerró (por SL, TP o manual)
     if (!liveSymbols.has(mexcSymbol)) {
       const currentPrice = await getCurrentPrice(mexcSymbol);
       const change = currentPrice ? ((pos.entryPrice - currentPrice) / pos.entryPrice) * 100 : 0;
@@ -374,12 +361,10 @@ async function main() {
     const text = msg.text || msg.caption || '';
     const chatId = msg.chat.id.toString();
 
-    // Log para debug
     console.log(`Mensaje recibido | chat: ${chatId} | from: ${msg.from?.username || msg.from?.id} | forward: ${!!msg.forward_origin} | texto: ${text.substring(0, 60)}`);
 
     if (chatId !== TELEGRAM_CHAT_ID.toString()) return;
 
-    // Comandos
     if (text === '/status') {
       const balance = await getAccountBalance();
       const live = await getOpenPositions();
@@ -447,47 +432,20 @@ async function main() {
       return;
     }
 
-    // Procesar señal directa del scanner (formato SIGNAL:{...})
+    // Señales via Telegram (legacy, por si acaso)
     if (!botActive) return;
-
     if (!text.startsWith('SIGNAL:')) return;
-
     const signal = parseSignal(text);
     if (!signal.valid) return;
-    if (signal.score < SCORE_MIN) {
-      console.log(`Score ${signal.score} < ${SCORE_MIN}, ignorando ${signal.symbol}`);
-      return;
-    }
-    if (signal.dex === 'AsterDEX' && signal.score >= SCORE_MIN) {
-      const asterUrl = `https://asterdex.com/en/trade/pro/futures/${signal.symbol}USDT`;
-      await sendTelegram(
-        `⚡ *SEÑAL ASTERDEX — ${signal.symbol}*\n\n` +
-        `Score: ${signal.score}/100 · 3/11 señales\n\n` +
-        `├ Entrada: $${signal.entrada.toFixed(6)}\n` +
-        `├ SL:      $${signal.sl.toFixed(6)}\n` +
-        `├ TP:      $${signal.tp.toFixed(6)}\n\n` +
-        `💰 $6 USDT mínimo · 3x · Short\n\n` +
-        `🔗 [Abrir en AsterDEX](${asterUrl})\n\n` +
-        `⚠️ Ejecución manual — bot no opera en DEX`
-      );
-      console.log(`Notificación AsterDEX enviada: ${signal.symbol} score=${signal.score}`);
-      return;
-    }
-
-    if (signal.dex !== 'MEXC') {
-      console.log(`Señal ${signal.dex} ignorada`);
-      return;
-    }
-
-    console.log(`Señal: ${signal.symbol} score=${signal.score}`);
-    await executeTrade(signal);
+    if (signal.score < SCORE_MIN) return;
+    if (signal.dex === 'MEXC') await executeTrade(signal);
   });
 
   bot.on('polling_error', (err) => {
     console.error('Polling error:', err.message);
   });
 
-  // Monitor cada 30s — solo para detectar cierres y registrar
+  // Monitor cada 30s
   setInterval(monitorPositions, 30000);
 
   // Heartbeat cada hora
@@ -496,18 +454,59 @@ async function main() {
     console.log(`Heartbeat | $${balance.toFixed(2)} | Pos: ${Object.keys(openPositions).length}`);
   }, 3600000);
 
+  // ============================================
+  // HTTP SERVER — recibir señales directas
+  // ============================================
+  const PORT = process.env.PORT || 3000;
+
+  http.createServer(async (req, res) => {
+    if (req.method === 'POST' && req.url === '/signal') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', async () => {
+        try {
+          const signal = JSON.parse(body);
+          console.log('HTTP signal:', JSON.stringify(signal));
+          res.writeHead(200);
+          res.end('ok');
+          if (!botActive) return;
+          if (signal.score < SCORE_MIN) return;
+          if (signal.dex === 'MEXC') {
+            await executeTrade(signal);
+          } else if (signal.dex === 'AsterDEX') {
+            const url = `https://asterdex.com/en/trade/pro/futures/${signal.sym}USDT`;
+            await sendTelegram(
+              `⚡ *SEÑAL ASTERDEX — ${signal.sym}*\n\nScore: ${signal.score}/100\n\n` +
+              `├ Entrada: $${signal.entrada.toFixed(6)}\n` +
+              `├ SL:      $${signal.sl.toFixed(6)}\n` +
+              `├ TP:      $${signal.tp.toFixed(6)}\n\n` +
+              `🔗 [Abrir en AsterDEX](${url})\n\n⚠️ Ejecución manual`
+            );
+          }
+        } catch(e) {
+          console.error('HTTP signal error:', e.message);
+          res.writeHead(400);
+          res.end('error');
+        }
+      });
+    } else {
+      res.writeHead(200);
+      res.end('ok');
+    }
+  }).listen(PORT, () => console.log(`HTTP server en puerto ${PORT}`));
+
   await sendTelegram(
     `🤖 *MEXC Bot online v2*\n\n` +
     `├ Trade size: $${TRADE_SIZE}\n` +
     `├ Leverage: ${LEVERAGE}x\n` +
     `├ Score mín: ${SCORE_MIN}\n` +
     `└ Max posiciones: ${MAX_POSITIONS}\n\n` +
-    `SL/TP nativos activados ✅\n\n` +
+    `SL/TP nativos + HTTP endpoint ✅\n\n` +
     `Comandos:\n` +
     `/status · /positions · /pause · /resume · /close SYMBOL`
   );
 
-  console.log('✅ Bot v2 listo — SL/TP nativos MEXC');
+  console.log('✅ Bot v2 listo — SL/TP nativos MEXC + HTTP /signal');
 }
 
 main().catch(console.error);
