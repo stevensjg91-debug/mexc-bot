@@ -83,7 +83,7 @@ async function openShort(symbol, contracts) {
     vol: contracts,
     side: 3,
     type: 5,
-    openType: 1
+    openType: 2
   });
 }
 
