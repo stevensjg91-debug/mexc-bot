@@ -70,7 +70,8 @@ async function mexcRequest(method, path, params = {}) {
 async function setLeverage(symbol, leverage) {
   return mexcRequest('POST', '/api/v1/private/position/change_leverage', {
     symbol,
-    leverage,
+    leverage: parseInt(leverage),
+    positionType: 1,
     openType: 1
   });
 }
