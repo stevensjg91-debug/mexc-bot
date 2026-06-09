@@ -245,7 +245,8 @@ async function executeTrade(signal) {
 
   // await setLeverage(mexcSymbol, LEVERAGE); // skip - configurado manualmente
 
-  const order = await openShort(mexcSymbol, contracts);
+const order = await openShort(mexcSymbol, contracts);
+  console.log('openShort response:', JSON.stringify(order));
   if (!order || order.code !== 200) {
     await sendTelegram(`❌ Error al abrir short ${sym}: ${order?.message || 'error desconocido'}`);
     return;
