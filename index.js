@@ -350,6 +350,37 @@ async function sendTelegram(text) {
 // MAIN
 // ============================================
 async function main() {
+  // HTTP server PRIMERO
+  const PORT = process.env.PORT || 8080;
+  http.createServer(async (req, res) => {
+    if (req.method === 'POST' && req.url === '/signal') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', async () => {
+        try {
+          const signal = JSON.parse(body);
+          console.log('HTTP signal:', JSON.stringify(signal));
+          res.writeHead(200);
+          res.end('ok');
+          if (!botActive) return;
+          if (signal.score < SCORE_MIN) return;
+          if (signal.dex === 'MEXC') await executeTrade(signal);
+          else if (signal.dex === 'AsterDEX') {
+            const url = `https://asterdex.com/en/trade/pro/futures/${signal.sym}USDT`;
+            await sendTelegram(`⚡ *SEÑAL ASTERDEX — ${signal.sym}*\n\nScore: ${signal.score}/100\n\n├ Entrada: $${signal.entrada.toFixed(6)}\n├ SL: $${signal.sl.toFixed(6)}\n├ TP: $${signal.tp.toFixed(6)}\n\n🔗 [Abrir en AsterDEX](${url})\n\n⚠️ Ejecución manual`);
+          }
+        } catch(e) {
+          console.error('HTTP signal error:', e.message);
+          res.writeHead(400);
+          res.end('error');
+        }
+      });
+    } else {
+      res.writeHead(200);
+      res.end('ok');
+    }
+  }).listen(PORT, () => console.log(`HTTP server en puerto ${PORT}`));
+
   console.log('🤖 MEXC Bot arrancando...');
   console.log(`Config: $${TRADE_SIZE}/trade · ${LEVERAGE}x · Score mín: ${SCORE_MIN} · Max pos: ${MAX_POSITIONS}`);
 
@@ -455,45 +486,7 @@ async function main() {
   }, 3600000);
 
   // ============================================
-  // HTTP SERVER — recibir señales directas
-  // ============================================
-  const PORT = process.env.PORT || 3000;
 
-  http.createServer(async (req, res) => {
-    if (req.method === 'POST' && req.url === '/signal') {
-      let body = '';
-      req.on('data', chunk => body += chunk);
-      req.on('end', async () => {
-        try {
-          const signal = JSON.parse(body);
-          console.log('HTTP signal:', JSON.stringify(signal));
-          res.writeHead(200);
-          res.end('ok');
-          if (!botActive) return;
-          if (signal.score < SCORE_MIN) return;
-          if (signal.dex === 'MEXC') {
-            await executeTrade(signal);
-          } else if (signal.dex === 'AsterDEX') {
-            const url = `https://asterdex.com/en/trade/pro/futures/${signal.sym}USDT`;
-            await sendTelegram(
-              `⚡ *SEÑAL ASTERDEX — ${signal.sym}*\n\nScore: ${signal.score}/100\n\n` +
-              `├ Entrada: $${signal.entrada.toFixed(6)}\n` +
-              `├ SL:      $${signal.sl.toFixed(6)}\n` +
-              `├ TP:      $${signal.tp.toFixed(6)}\n\n` +
-              `🔗 [Abrir en AsterDEX](${url})\n\n⚠️ Ejecución manual`
-            );
-          }
-        } catch(e) {
-          console.error('HTTP signal error:', e.message);
-          res.writeHead(400);
-          res.end('error');
-        }
-      });
-    } else {
-      res.writeHead(200);
-      res.end('ok');
-    }
-  }).listen(PORT, () => console.log(`HTTP server en puerto ${PORT}`));
 
   await sendTelegram(
     `🤖 *MEXC Bot online v2*\n\n` +
