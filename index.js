@@ -243,7 +243,7 @@ async function executeTrade(signal) {
 
   console.log(`Abriendo short ${sym}: ${contracts} contratos @ $${currentPrice} | SL: ${slPrice} | TP: ${tpPrice}`);
 
-  await setLeverage(mexcSymbol, LEVERAGE);
+  // await setLeverage(mexcSymbol, LEVERAGE); // skip - configurado manualmente
 
   const order = await openShort(mexcSymbol, contracts);
   if (!order || order.code !== 200) {
