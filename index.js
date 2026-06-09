@@ -252,7 +252,7 @@ const order = await openShort(mexcSymbol, contracts);
     return;
   }
 
-  await sleep(1000);
+  await sleep(3000);
 
 const tpOrder = await takeProfitOrder(mexcSymbol, contracts, tpPrice);
   if (!tpOrder || tpOrder.code !== 0) {
