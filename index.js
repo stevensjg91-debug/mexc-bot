@@ -35,12 +35,11 @@ function mexcSign(params, method = 'POST') {
   const ts = Date.now().toString();
   const queryString = method === 'GET'
     ? Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&')
-    : '';
+    : JSON.stringify(params);
   const toSign = MEXC_API_KEY + ts + queryString;
   const sig = crypto.createHmac('sha256', MEXC_API_SECRET).update(toSign).digest('hex');
   return { ts, sig };
 }
-
 async function mexcRequest(method, path, params = {}) {
   const { ts, sig } = mexcSign(params, method);
   const headers = {
