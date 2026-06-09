@@ -271,8 +271,10 @@ openPositions[sym] = {
     `├ Contratos: ${contracts}\n` +
     `└ $${TRADE_SIZE} · ${LEVERAGE}x · exposición $${notional}\n\n` +
     `📊 Posiciones: ${Object.keys(openPositions).length}/${MAX_POSITIONS}\n` +
-    `⚙️ Monitor activo — cierre automático por TP/SL`
+ `⚙️ Monitor activo — cierre automático por TP/SL`
   );
+}
+
 // ============================================
 // MONITOR
 // ============================================
