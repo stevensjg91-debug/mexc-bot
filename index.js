@@ -254,10 +254,12 @@ const order = await openShort(mexcSymbol, contracts);
 
   await sleep(1000);
 
-  const tpOrder = await takeProfitOrder(mexcSymbol, contracts, tpPrice);
+const tpOrder = await takeProfitOrder(mexcSymbol, contracts, tpPrice);
   if (!tpOrder || tpOrder.code !== 0) {
     console.warn(`TP order falló para ${sym}:`, tpOrder?.message);
   }
+
+  await sleep(2000);
 
   const slOrder = await placeStopLoss(mexcSymbol, contracts, slPrice);
   if (!slOrder || slOrder.code !== 0) {
