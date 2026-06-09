@@ -61,7 +61,9 @@ async function mexcRequest(method, path, params = {}) {
       : await axios.post(url, JSON.stringify(params), { headers });
     return res.data;
   } catch (e) {
-    console.error(`MEXC error [${method} ${path}]:`, e.response?.data || e.message);
+    console.error(`MEXC error [${method} ${path}]:`, JSON.stringify(e.response?.data) || e.message);
+    console.error(`MEXC status:`, e.response?.status);
+    console.error(`MEXC headers sent:`, JSON.stringify(e.config?.headers));
     return null;
   }
 }
