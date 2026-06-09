@@ -236,7 +236,7 @@ async function executeTrade(signal) {
   }
 
   const notional  = TRADE_SIZE * LEVERAGE;
-  const contracts = Math.max(Math.floor((notional / currentPrice) * 10) / 10, 0.1);
+  const contracts = Math.max(Math.floor(notional / currentPrice), 1);
   const slPrice   = sl > 0 ? sl : parseFloat((currentPrice * 1.10).toFixed(6));
   const tpPrice   = tp > 0 ? tp : parseFloat((currentPrice * 0.70).toFixed(6));
 
