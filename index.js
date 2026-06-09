@@ -252,47 +252,27 @@ const order = await openShort(mexcSymbol, contracts);
     return;
   }
 
-  await sleep(3000);
-
-const tpOrder = await takeProfitOrder(mexcSymbol, contracts, tpPrice);
-  if (!tpOrder || tpOrder.code !== 0) {
-    console.warn(`TP order falló para ${sym}:`, tpOrder?.message);
-  }
-
-  await sleep(2000);
-
-  const slOrder = await placeStopLoss(mexcSymbol, contracts, slPrice);
-  if (!slOrder || slOrder.code !== 0) {
-    console.warn(`SL order falló para ${sym}:`, slOrder?.message);
-  }
-
-  openPositions[sym] = {
+openPositions[sym] = {
     entryPrice: currentPrice,
     contracts,
     sl: slPrice,
     tp: tpPrice,
     openTime: new Date().toISOString(),
     score,
-    dex,
-    tpOrderId: tpOrder?.data,
-    slOrderId: slOrder?.data
+    dex
   };
-
-  const tpOk = tpOrder?.code === 0 ? '✅' : '⚠️';
-  const slOk = slOrder?.code === 0 ? '✅' : '⚠️';
 
   await sendTelegram(
     `✅ *SHORT abierto — ${sym}*\n\n` +
     `Score: ${score}/100 · ${dex}\n\n` +
     `├ Entrada:   $${currentPrice.toFixed(6)}\n` +
-    `├ TP ${tpOk}:     $${tpPrice.toFixed(6)}\n` +
-    `├ SL ${slOk}:     $${slPrice.toFixed(6)}\n` +
+    `├ TP:        $${tpPrice.toFixed(6)}\n` +
+    `├ SL:        $${slPrice.toFixed(6)}\n` +
     `├ Contratos: ${contracts}\n` +
     `└ $${TRADE_SIZE} · ${LEVERAGE}x · exposición $${notional}\n\n` +
-    `📊 Posiciones: ${Object.keys(openPositions).length}/${MAX_POSITIONS}`
+    `📊 Posiciones: ${Object.keys(openPositions).length}/${MAX_POSITIONS}\n` +
+    `⚙️ Monitor activo — cierre automático por TP/SL`
   );
-}
-
 // ============================================
 // MONITOR
 // ============================================
