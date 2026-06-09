@@ -59,7 +59,7 @@ async function mexcRequest(method, path, params = {}) {
     const url = MEXC_BASE + path;
     const res = method === 'GET'
       ? await axios.get(url, { headers, params })
-      : await axios.post(url, params, { headers });
+      : await axios.post(url, JSON.stringify(params), { headers });
     return res.data;
   } catch (e) {
     console.error(`MEXC error [${method} ${path}]:`, e.response?.data || e.message);
