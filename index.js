@@ -247,7 +247,7 @@ async function executeTrade(signal) {
 
 const order = await openShort(mexcSymbol, contracts);
   console.log('openShort response:', JSON.stringify(order));
-  if (!order || order.code !== 200) {
+  if (!order || order.code !== 0) {
     await sendTelegram(`❌ Error al abrir short ${sym}: ${order?.message || 'error desconocido'}`);
     return;
   }
@@ -255,12 +255,12 @@ const order = await openShort(mexcSymbol, contracts);
   await sleep(1000);
 
   const tpOrder = await takeProfitOrder(mexcSymbol, contracts, tpPrice);
-  if (!tpOrder || tpOrder.code !== 200) {
+  if (!tpOrder || tpOrder.code !== 0) {
     console.warn(`TP order falló para ${sym}:`, tpOrder?.message);
   }
 
   const slOrder = await placeStopLoss(mexcSymbol, contracts, slPrice);
-  if (!slOrder || slOrder.code !== 200) {
+  if (!slOrder || slOrder.code !== 0) {
     console.warn(`SL order falló para ${sym}:`, slOrder?.message);
   }
 
@@ -276,8 +276,8 @@ const order = await openShort(mexcSymbol, contracts);
     slOrderId: slOrder?.data
   };
 
-  const tpOk = tpOrder?.code === 200 ? '✅' : '⚠️';
-  const slOk = slOrder?.code === 200 ? '✅' : '⚠️';
+  const tpOk = tpOrder?.code === 0 ? '✅' : '⚠️';
+  const slOk = slOrder?.code === 0 ? '✅' : '⚠️';
 
   await sendTelegram(
     `✅ *SHORT abierto — ${sym}*\n\n` +
