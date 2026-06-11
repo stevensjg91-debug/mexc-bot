@@ -68,21 +68,11 @@ async function mexcRequest(method, path, params = {}) {
 }
 
 async function setLeverage(symbol, leverage) {
-  // Intentar isolated (positionType:2), si falla por modo cross intentar sin cambiar modo
   const res = await mexcRequest('POST', '/api/v1/private/position/change_leverage', {
     symbol,
     leverage: parseInt(leverage),
-    positionType: 2
+    positionType: 2  // isolated — si falla, la orden se cancela en executeTrade
   });
-  if (res && res.code === 6007) {
-    // Par bloqueado en cross — intentar solo cambiar leverage sin cambiar modo
-    console.log(`${symbol}: cross mode locked, setting leverage only`);
-    return mexcRequest('POST', '/api/v1/private/position/change_leverage', {
-      symbol,
-      leverage: parseInt(leverage),
-      positionType: 1
-    });
-  }
   return res;
 }
 
@@ -254,9 +244,13 @@ async function executeTrade(signal) {
 
   console.log(`Abriendo short ${sym}: ${contracts} contratos @ $${currentPrice} | SL: ${slPrice} | TP: ${tpPrice}`);
 
-  // FIX: setLeverage reactivado con positionType: 2 (isolated)
+  // Forzar isolated antes de abrir — si falla, ABORTAR
   const levRes = await setLeverage(mexcSymbol, LEVERAGE);
   console.log('setLeverage response:', JSON.stringify(levRes));
+  if (!levRes || levRes.code !== 0) {
+    await sendTelegram(`⛔ ${sym} — no se pudo configurar isolated. Orden CANCELADA para proteger capital.`);
+    return;
+  }
 
   const order = await openShort(mexcSymbol, contracts);
   console.log('openShort response:', JSON.stringify(order));
