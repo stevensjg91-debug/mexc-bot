@@ -71,8 +71,8 @@ async function setLeverage(symbol, leverage) {
   return mexcRequest('POST', '/api/v1/private/position/change_leverage', {
     symbol,
     leverage: parseInt(leverage),
-    positionType: 1,
-    openType: 1
+    positionType: 2,  // FIX: 2=isolated (antes era 1=cross)
+    openType: 1       // isolated
   });
 }
 
@@ -83,7 +83,7 @@ async function openShort(symbol, contracts) {
     vol: contracts,
     side: 3,
     type: 5,
-    openType: 2
+    openType: 1  // FIX: 1=isolated (antes era 2=cross → usaba $50 de margen)
   });
 }
 
@@ -238,21 +238,23 @@ async function executeTrade(signal) {
 
   const notional  = TRADE_SIZE * LEVERAGE;
   const contracts = Math.max(Math.floor(notional / currentPrice), 1);
- const slPrice   = (sl > 0 && sl < currentPrice * 1.15) ? sl : parseFloat((currentPrice * 1.08).toFixed(6));
+  const slPrice   = (sl > 0 && sl < currentPrice * 1.15) ? sl : parseFloat((currentPrice * 1.08).toFixed(6));
   const tpPrice   = (tp > 0 && tp > currentPrice * 0.82) ? tp : parseFloat((currentPrice * 0.88).toFixed(6));
 
   console.log(`Abriendo short ${sym}: ${contracts} contratos @ $${currentPrice} | SL: ${slPrice} | TP: ${tpPrice}`);
 
-  // await setLeverage(mexcSymbol, LEVERAGE); // skip - configurado manualmente
+  // FIX: setLeverage reactivado con positionType: 2 (isolated)
+  const levRes = await setLeverage(mexcSymbol, LEVERAGE);
+  console.log('setLeverage response:', JSON.stringify(levRes));
 
-const order = await openShort(mexcSymbol, contracts);
+  const order = await openShort(mexcSymbol, contracts);
   console.log('openShort response:', JSON.stringify(order));
   if (!order || order.code !== 0) {
     await sendTelegram(`❌ Error al abrir short ${sym}: ${order?.message || 'error desconocido'}`);
     return;
   }
 
-openPositions[sym] = {
+  openPositions[sym] = {
     entryPrice: currentPrice,
     contracts,
     sl: slPrice,
@@ -271,7 +273,7 @@ openPositions[sym] = {
     `├ Contratos: ${contracts}\n` +
     `└ $${TRADE_SIZE} · ${LEVERAGE}x · exposición $${notional}\n\n` +
     `📊 Posiciones: ${Object.keys(openPositions).length}/${MAX_POSITIONS}\n` +
- `⚙️ Monitor activo — cierre automático por TP/SL`
+    `⚙️ Monitor activo — cierre automático por TP/SL`
   );
 }
 
@@ -475,9 +477,6 @@ async function main() {
     const balance = await getAccountBalance();
     console.log(`Heartbeat | $${balance.toFixed(2)} | Pos: ${Object.keys(openPositions).length}`);
   }, 3600000);
-
-  // ============================================
-
 
   await sendTelegram(
     `🤖 *MEXC Bot online v2*\n\n` +
