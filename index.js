@@ -68,22 +68,33 @@ async function mexcRequest(method, path, params = {}) {
 }
 
 async function setLeverage(symbol, leverage) {
-  return mexcRequest('POST', '/api/v1/private/position/change_leverage', {
+  // Intentar isolated (positionType:2), si falla por modo cross intentar sin cambiar modo
+  const res = await mexcRequest('POST', '/api/v1/private/position/change_leverage', {
     symbol,
     leverage: parseInt(leverage),
-    positionType: 2,  // FIX: 2=isolated (antes era 1=cross)
-    openType: 1       // isolated
+    positionType: 2
   });
+  if (res && res.code === 6007) {
+    // Par bloqueado en cross — intentar solo cambiar leverage sin cambiar modo
+    console.log(`${symbol}: cross mode locked, setting leverage only`);
+    return mexcRequest('POST', '/api/v1/private/position/change_leverage', {
+      symbol,
+      leverage: parseInt(leverage),
+      positionType: 1
+    });
+  }
+  return res;
 }
 
 async function openShort(symbol, contracts) {
+  // NO incluir openType aquí — MEXC lo hereda de la config del par
+  // El modo isolated/cross se gestiona solo via setLeverage
   return mexcRequest('POST', '/api/v1/private/order/submit', {
     symbol,
     price: 0,
     vol: contracts,
     side: 3,
-    type: 5,
-    openType: 1  // FIX: 1=isolated (antes era 2=cross → usaba $50 de margen)
+    type: 5
   });
 }
 
